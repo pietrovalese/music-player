@@ -264,6 +264,25 @@ fun PlayerScreen(
 
             Spacer(Modifier.height(16.dp))
 
+            playerState.playbackError?.let { errorMessage ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFB00020).copy(alpha = 0.25f))
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = errorMessage,
+                        color = Color(0xFFFF8A80),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
             // ─── Seekbar ──────────────────────────────────────────────────
             PlayerSeekBarSection(
                 playbackPositionFlow = viewModel.playbackPosition,

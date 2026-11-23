@@ -183,7 +183,8 @@ class PlayerController @Inject constructor(
             currentQueueIndex = startIndex,
             currentMediaItem = items[startIndex],
             contextTitle = contextTitle,
-            duration = song.duration.coerceAtLeast(0L)
+            duration = song.duration.coerceAtLeast(0L),
+            playbackError = null
         )
 
         withController { ctrl ->
@@ -198,7 +199,10 @@ class PlayerController @Inject constructor(
         val currentQueue = _playerState.value.queue
         if (index !in currentQueue.indices) return
         _playbackPosition.value = 0L
-        _playerState.value = _playerState.value.copy(currentQueueIndex = index)
+        _playerState.value = _playerState.value.copy(
+            currentQueueIndex = index,
+            playbackError = null
+        )
         withController { ctrl ->
             ctrl.seekTo(index, 0L)
             ctrl.play()
@@ -272,7 +276,21 @@ class PlayerController @Inject constructor(
 
     fun togglePlayPause() {
         withController { ctrl ->
-            if (ctrl.isPlaying) ctrl.pause() else ctrl.play()
+            if (ctrl.isPlaying) {
+                ctrl.pause()
+            } else {
+                when (ctrl.playbackState) {
+                    Player.STATE_IDLE -> {
+                        ctrl.prepare()
+                        ctrl.play()
+                    }
+                    Player.STATE_ENDED -> {
+                        ctrl.seekTo(0L)
+                        ctrl.play()
+                    }
+                    else -> ctrl.play()
+                }
+            }
         }
     }
 
@@ -331,12 +349,21 @@ class PlayerController @Inject constructor(
     // ─── Listener ─────────────────────────────────────────────────────────────
 
     private val playerListener = object : Player.Listener {
+        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            _playerState.value = _playerState.value.copy(
+                isPlaying = false,
+                playbackError = "Impossibile riprodurre il brano (${error.errorCodeName})"
+            )
+            stopPositionUpdates()
+        }
+
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             val ctrl = controller
             _playbackPosition.value = ctrl?.currentPosition?.coerceAtLeast(0L) ?: _playbackPosition.value
             _playerState.value = _playerState.value.copy(
                 isPlaying = isPlaying,
-                duration = ctrl?.duration?.takeIf { it > 0 } ?: _playerState.value.duration
+                duration = ctrl?.duration?.takeIf { it > 0 } ?: _playerState.value.duration,
+                playbackError = if (isPlaying) null else _playerState.value.playbackError
             )
             if (isPlaying) startPositionUpdates() else stopPositionUpdates()
         }
@@ -357,7 +384,8 @@ class PlayerController @Inject constructor(
                 currentMediaItem = mediaItem,
                 currentQueueIndex = ctrl?.currentMediaItemIndex?.coerceAtLeast(0)
                     ?: _playerState.value.currentQueueIndex,
-                duration = ctrl?.duration?.takeIf { it > 0 } ?: 0L
+                duration = ctrl?.duration?.takeIf { it > 0 } ?: 0L,
+                playbackError = null
             )
             if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) {
                 mediaItem?.mediaId?.toLongOrNull()?.let { songId ->
@@ -388,12 +416,14 @@ data class PlayerState(
     val queue: List<Song> = emptyList(),
     val currentQueueIndex: Int = 0,
     val contextTitle: String = "La tua libreria",
-    val sleepTimerRemainingMs: Long? = null
+    val sleepTimerRemainingMs: Long? = null,
+    val playbackError: String? = null
 )
 
 fun Song.toMediaItem(): MediaItem =
     MediaItem.Builder()
         .setMediaId(id.toString())
+        .setUri(uri)
         .setRequestMetadata(
             MediaItem.RequestMetadata.Builder()
                 .setMediaUri(uri)

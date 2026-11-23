@@ -36,7 +36,13 @@ class MediaStoreScanner @Inject constructor(
             baseProjection.add(MediaStore.Audio.Media.GENRE)
         }
 
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+        val selection = buildString {
+            append("${MediaStore.Audio.Media.IS_MUSIC} != 0")
+            append(" AND ${MediaStore.Audio.Media.SIZE} > 0")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                append(" AND ${MediaStore.Audio.Media.IS_PENDING} = 0")
+            }
+        }
         val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
 
         try {
